@@ -1,9 +1,22 @@
+  # Names to all the magic numbers I am using.
+  .equ stage2_base,     0x1000
+  .equ stage2_offset,   0x0000
+
+  .equ DBIOS,           0x13    # BIOS interrupt vector for disk services.
+  .equ disk_read,       0x02    # disk read service.
+
+  .equ PBIOS,           0x10    # BIOS interrupt vector for print services.
+  .equ print_service,   0x0e    # BIOS print service.
+
+  
+  # Begin the code after the definitions.
   .code16
 
   .text
   .globl _start
 _start:
   jmp _boot         # jump to the boot code to start execution.
+  
 
 msg_fail:
   .asciz "Something has gone wrong..."
@@ -14,6 +27,7 @@ msg_fail:
   leaw \str, %si
   call print_string
   .endm
+  
 
   # Function to print null terminated string.
 print_string:
@@ -25,10 +39,11 @@ print_string:
   jmp print_string
 print_string_out:
   ret
+  
 
   # Macro to read a sector from a floppy disk and load it at extended segment.
   .macro m_read_sector_from_floppy num
-  movb $0x02, %ah       # read disk function.
+  movb $disk_read, %ah  # read disk function.
   movb $0x01, %al       # total sectors to read.
   movb $0x00, %ch       # select cylinder zero.
   movb $0x00, %dh       # select head zero.
@@ -40,14 +55,15 @@ print_string_out:
   jne _failure          # then throw error.
   .endm
 
+  
   # Display the string that we have inserted as the identifier of the sector.
 display_data:
 display_data_in:
   movb %es:(%bx), %al
   orb %al, %al
   jz display_data_out
-  movb $0x0e, %ah
-  int $0x10
+  movb $print_service, %ah
+  int $PBIOS
   incw %bx
   jmp display_data_in
 display_data_out:
@@ -57,17 +73,14 @@ display_data_out:
 _boot:
   movw $0x07c0, %ax             # initialize the data segment.
   movw %ax, %ds                 # to 0x7c00 location.
-  movw $0x1000, %ax             # set ax = 0x1000.
+  movw $stage2_base, %ax        # set ax = 0x1000.
   movw %ax, %es                 # set es = 0x1000 = ax.
   xorw %bx, %bx                 # set bx = 0.
   m_read_sector_from_floppy $2  # read sector from floppy disk.
 
   # Far jump. with this instruction it modifies cs segment register with the
   # first value. The other one is an offset.
-  ljmp $0x1000, $0x0000
-  #call display_data             # display the label of the sector.
-  #m_read_sector_from_floppy $3  # read 3rd sector from floppy disk.
-  #call display_data             # display the label of the sector.
+  ljmp $stage2_base, $stage2_offset
 
 _freeze:
   jmp _freeze

@@ -5,3 +5,11 @@ The test assembly files are simples bootloader to practice.
 I have used these sources:
 * wiki.osdev.org
 * https://www.codeproject.com/Articles/668422/Writing-a-boot-loader-in-Assembly-and-C-Part
+
+HOW TO USE:
+================================================================================
+You need bochs installed.
+
+Then you can execute:
+* make (to build).
+* make bochs (to execute bochs VM).
