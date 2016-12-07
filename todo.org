@@ -1,0 +1,46 @@
+* DONE Teoría bootloader
+  http://wiki.osdev.org/Bootloader
+* DONE Rolling your own bootloader (más teoría)
+  http://wiki.osdev.org/Rolling_Your_Own_Bootloader
+* DONE Writing a hello world bootloader
+  Un simple bootloader Hola Mundo. Está en la carpeta bootloader/00_hola_mundo y
+  tengo una versión en nasm en bootloader_nasm.
+
+  http://viralpatel.net/taj/tutorial/hello_world_bootloader.php
+  http://web.archive.org/web/20140729084135/http://viralpatel.net/taj/tutorial/hello_world_bootloader.php
+  Dado que está en nasm utilicé este otro enlace que me ayudó a traducirlo a
+  gas.
+  http://stackoverflow.com/questions/32508919/how-to-produce-a-minimal-bios-hello-world-boot-sector-with-gcc-that-works-from-a
+  Otro buen enlace (leer comentarios al final).
+  http://blog.ackx.net/asm-hello-world-bootloader.html
+* TODO Writing a bootloader that load an OS
+  A partir de la parte anterior, ahora vamos a crear un SO que sea cargado por
+  el bootloader. Me he basado en:
+  https://appusajeev.wordpress.com/2011/01/27/writing-a-16-bit-real-mode-os-nasm/
+
+  Cuyo código fuente está en:
+  https://github.com/appusajeev/os-dev-16
+
+  Otro buen enlace donde se explica cómo cargar lo que hay en el segundo sector
+  de un disco (floppy) en una posición determinada de memoria:
+  http://www.osdever.net/tutorials/view/loading-sectors
+
+  LO ANTERIOR NO ME AYUDÓ A ENCONTRAR LA SOLUCIÓN QUE FUNCIONARA PARA MI. De
+  hecho escribí en el for de osdev y obtuve estas respuestas:
+  http://forum.osdev.org/viewtopic.php?f=1&t=31041&sid=1784d01bb7f66efe3878931ba86907be
+
+  A partir de ahí buscando di con la solución en estos dos enlaces (son el
+  mismo tutorial dividido en dos partes. La que me lanzó fue la segunda ya que
+  en la primera no hay nada que no supiera ya):
+  https://www.codeproject.com/Articles/664165/Writing-a-boot-loader-in-Assembly-and-C-Part
+  https://www.codeproject.com/Articles/668422/Writing-a-boot-loader-in-Assembly-and-C-Part
+
+  Puedo encontrar todo lo que he heche en las carpetas bootloader/02 y bootloader_v2.
+* TODO Writing a bootloader from Scratch
+  http://www.cs.cmu.edu/~410-s07/p4/p4-boot.pdf
+* TODO Bare Metal Examples
+  https://github.com/cirosantilli/x86-bare-metal-examples
+
+  Con esta página he dado a través del segundo comentario en: http://stackoverflow.com/questions/22054578/how-to-run-a-program-without-an-operating-system/32483545#32483545
+  Otra página de stackoverflow intersante (tercer comentario): http://stackoverflow.com/questions/3215878/what-are-in-out-instructions-in-x86-used-for
+  https://github.com/cirosantilli/x86-bare-metal-examples
