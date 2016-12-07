@@ -1,0 +1,7 @@
+This bootloader loads the seconde sector from a floppy where a program is.
+
+The test assembly files are simples bootloader to practice.
+
+I have used these sources:
+* wiki.osdev.org
+* https://www.codeproject.com/Articles/668422/Writing-a-boot-loader-in-Assembly-and-C-Part
