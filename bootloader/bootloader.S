@@ -1,4 +1,6 @@
-  # Names to all the magic numbers I am using.
+ ###############################################################################
+## Names to all the magic numbers I am using.
+###############################################################################
   .equ stage2_base,     0x1000  # where os will be load.
   .equ stage2_offset,   0x0000
 
@@ -8,19 +10,26 @@
   .equ PBIOS,           0x10    # BIOS interrupt vector for print services.
   .equ print_service,   0x0e    # BIOS print service.
 
-  
-  # Begin the code after the definitions.
+  .equ MBIOS,           0x15    # BIOS upper memory detection interrupt.
+  .equ mem_detection,   0xe820  # upper memory detection service.
+
+  .equ md_begin_buffer, 0x07e0  # buffer list memory detection.
+                                # I put this list here because this RAM is
+                                # guaranteed free. This is the value that will
+                                # be load in ES register. When use ES:DI then
+                                # the phisical address will be: ES * 0x10 + BX.
+                                # See:
+                                # http://wiki.osdev.org/Memory_Map_(x86))
+
+
+###############################################################################
+## Begin the code after the definitions.
+###############################################################################
   .code16
 
-  .text
-  .globl _start
-_start:
-  jmp _boot         # jump to the boot code to start execution.
-  
-
-msg_fail:
-  .asciz "Something was wrong..."
-
+###############################################################################
+## MACROS.
+###############################################################################
   # Macro to print null terminated string. This macro calls function
   # print_string.
   .macro m_print_string str
@@ -42,21 +51,47 @@ msg_fail:
   cmpb $0x01, %al       # if total sectors read != 1.
   jne _failure          # then throw error.
   .endm
+
+###############################################################################
+## START.
+###############################################################################
+  .text
+  .globl _start
+_start:
+_mem_detection:
+  movw $md_begin_buffer, %ax
+  movw %ax, %es
+  movw $0x0, %di
+  xorl %ebx, %ebx
+_mem_detection_next:
+  movw $1, %es:24(%di)          # sets that last uint64_t to 1 before each call,
+                                # to make your map compatible with ACPI
+  movl $0x534d4150, %edx
+  movl $24, %ecx
+  movl $mem_detection, %eax
+  int $MBIOS
+  jc _mem_detection_finish
+  testl %ebx, %ebx
+  je _mem_detection_finish
   
+_mem_detection_ignore_test:
+  # Is the second 64 bits 0? Then it ignores the entry.
+  movl %es:8(%di), %ecx
+  orl %es:12(%di), %ecx
+  jecxz _mem_detection_next
+  addw $24, %di
+  jmp _mem_detection_next
 
-  # Function to print null terminated string.
-print_string:
-  lodsb
-  orb %al, %al
-  jz print_string_out
-  movb $print_service, %ah
-  int $PBIOS
-  jmp print_string
-print_string_out:
-  ret
+_mem_detection_finish:  
+  #jmp _freeze
 
+  #movl 8(%es,%di), %ecx
+  #orl %ecx, 12(%es,%di)
   
 _boot:
+  clc
+  xorw %bx, %bx
+  
   movw $0x07c0, %ax             # initialize the data segment.
   movw %ax, %ds                 # to 0x7c00 location.
   movw $stage2_base, %ax        # set ax = 0x1000.
@@ -71,9 +106,29 @@ _boot:
 _freeze:
   jmp _freeze
 
+
+###############################################################################
+## FUNCTIONS.
+###############################################################################
+  # Function to print null terminated string.
+print_string:
+  lodsb
+  orb %al, %al
+  jz print_string_out
+  movb $print_service, %ah
+  int $PBIOS
+  jmp print_string
+print_string_out:
+  ret
+  
+  # Function that print a fail message.
 _failure:
   m_print_string msg_fail
   jmp _freeze
+  
+
+msg_fail:
+  .asciz "Something was wrong..."
 
   . = _start + 510              # mov to 510th byte from 0 pos.
   .byte 0x55                    # first signature's part.
