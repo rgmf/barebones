@@ -1,43 +1,45 @@
- ###############################################################################
+################################################################################
 ## Names to all the magic numbers I am using.
-###############################################################################
-  .equ stage2_base,     0x1000  # where os will be load.
-  .equ stage2_offset,   0x0000
+##############################################################################*/
+  .equ stage2_base,     0x1000     # where os will be load. Base and
+  .equ stage2_offset,   0x0000     # offset.
 
-  .equ DBIOS,           0x13    # BIOS interrupt vector for disk services.
-  .equ disk_read,       0x02    # disk read service.
+  .equ DBIOS,           0x13       # BIOS interrupt vector for disk services.
+  .equ disk_read,       0x02       # disk read service.
 
-  .equ PBIOS,           0x10    # BIOS interrupt vector for print services.
-  .equ print_service,   0x0e    # BIOS print service.
+  .equ MBIOS,           0x15       # BIOS upper memory detection interrupt.
+  .equ mem_detection,   0xe820     # upper memory detection service.
 
-  .equ MBIOS,           0x15    # BIOS upper memory detection interrupt.
-  .equ mem_detection,   0xe820  # upper memory detection service.
+  .equ md_begin_buffer, 0x0800     # buffer list memory detection.
+                                   # I put this list here because this RAM is
+                                   # guaranteed free. This is the value that
+                                   # will be load in ES register. When use
+                                   # ES:DI then the phisical address will be:
+                                   # ES * 0x10 + BX. See:
+                                   # http://wiki.osdev.org/Memory_Map_(x86))
 
-  .equ md_begin_buffer, 0x07e0  # buffer list memory detection.
-                                # I put this list here because this RAM is
-                                # guaranteed free. This is the value that will
-                                # be load in ES register. When use ES:DI then
-                                # the phisical address will be: ES * 0x10 + BX.
-                                # See:
-                                # http://wiki.osdev.org/Memory_Map_(x86))
+  .equ vesa_begin_buffer, 0x07e0   # The begin of the 512 bytes buffer for
+                                   # VASA BIOS information structure.
+
+  .equ BVESAINF,          0x10     # VESA BIOS information functions.
+  .equ vesa_service,      0x4f00   # VESA function information.
 
 
-###############################################################################
+################################################################################
 ## Begin the code after the definitions.
-###############################################################################
+##############################################################################*/
   .code16
 
-###############################################################################
+################################################################################
 ## MACROS.
-###############################################################################
+##############################################################################*/
   # Macro to print null terminated string. This macro calls function
   # print_string.
   .macro m_print_string str
   leaw \str, %si
   call print_string
   .endm
-
-
+  
   # Macro to read a sector from a floppy disk and load it at extended segment.
   .macro m_read_sector_from_floppy num
   movb $disk_read, %ah  # read disk function.
@@ -52,12 +54,14 @@
   jne _failure          # then throw error.
   .endm
 
-###############################################################################
+################################################################################
 ## START.
-###############################################################################
+##############################################################################*/
   .text
   .globl _start
 _start:
+
+######################## MEMORY DETECTION
 _mem_detection:
   movw $md_begin_buffer, %ax
   movw %ax, %es
@@ -83,11 +87,19 @@ _mem_detection_ignore_test:
   jmp _mem_detection_next
 
 _mem_detection_finish:  
-  #jmp _freeze
 
-  #movl 8(%es,%di), %ecx
-  #orl %ecx, 12(%es,%di)
-  
+######################## DETECTING AVAILABLE VIDEO MODES
+  xorl %eax, %eax
+  movw $vesa_begin_buffer, %ax
+  movw %ax, %es
+  movw $0x0, %di
+  movw $vesa_service, %ax
+  int $BVESAINF
+  cmp $0x004f, %ax
+  jne _failure
+
+
+######################## LOAD THE SECOND SECTOR WHERE OS IS
 _boot:
   clc
   xorw %bx, %bx
@@ -103,25 +115,11 @@ _boot:
   # first value. The other one is an offset.
   ljmp $stage2_base, $stage2_offset
 
+  
 _freeze:
   jmp _freeze
 
 
-###############################################################################
-## FUNCTIONS.
-###############################################################################
-  # Function to print null terminated string.
-print_string:
-  lodsb
-  orb %al, %al
-  jz print_string_out
-  movb $print_service, %ah
-  int $PBIOS
-  jmp print_string
-print_string_out:
-  ret
-  
-  # Function that print a fail message.
 _failure:
   m_print_string msg_fail
   jmp _freeze
