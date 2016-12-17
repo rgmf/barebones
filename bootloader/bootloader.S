@@ -4,6 +4,9 @@
   .equ stage2_base,     0x1000     # where os will be load. Base and
   .equ stage2_offset,   0x0000     # offset.
 
+  .equ PBIOS,           0x10       # BIOS interrupt vector for print services.
+  .equ print_service,   0x0e       # BIOS print service.
+
   .equ DBIOS,           0x13       # BIOS interrupt vector for disk services.
   .equ disk_read,       0x02       # disk read service.
 
@@ -56,7 +59,7 @@
 
 ################################################################################
 ## START.
-##############################################################################*/
+################################################################################
   .text
   .globl _start
 _start:
@@ -114,6 +117,20 @@ _boot:
   # Far jump. With this instruction it modifies cs segment register with the
   # first value. The other one is an offset.
   ljmp $stage2_base, $stage2_offset
+
+
+################################################################################
+## FUNCTIONS.
+##############################################################################*/
+print_string:
+  lodsb
+  orb %al, %al
+  jz print_string_out
+  movb $print_service, %ah
+  int $PBIOS
+  jmp print_string
+print_string_out:
+  ret
 
   
 _freeze:
