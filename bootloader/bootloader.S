@@ -2,7 +2,7 @@
 ## Names to all the magic numbers I am using.
 ##############################################################################*/
   .equ stage2_base,     0x1000     # where os will be load. Base and
-  .equ stage2_offset,   0x0000     # offset.
+  .equ stage2_offset,   0x0000     # offset. (es=0x1000, bx=0x0 => 0x10000).
 
   .equ PBIOS,           0x10       # BIOS interrupt vector for print services.
   .equ print_service,   0x0e       # BIOS print service.
@@ -63,7 +63,6 @@
   .text
   .globl _start
 _start:
-
 ######################## MEMORY DETECTION
 _mem_detection:
   movw $md_begin_buffer, %ax
@@ -89,18 +88,164 @@ _mem_detection_ignore_test:
   addw $24, %di
   jmp _mem_detection_next
 
-_mem_detection_finish:  
+_mem_detection_finish:
+  
 
-######################## DETECTING AVAILABLE VIDEO MODES
-  xorl %eax, %eax
-  movw $vesa_begin_buffer, %ax
+######################## TODO: DETECTING AVAILABLE VIDEO MODES
+  #xorl %eax, %eax
+  #movw $vesa_begin_buffer, %ax
+  #movw %ax, %es
+  #movw $0x0, %di
+  #movw $vesa_service, %ax
+  #int $BVESAINF
+  #cmp $0x004f, %ax
+  #jne _failure
+
+######################## TESTING A20 LINE AND ENABLED IT IF NEEDED
+  # Turning on the 21st address line is unfortunately a bit arcane. There are
+  # various ways to do it, and it’s necessary to implement them all since you
+  # never know which processor (well, at least 80386 or better) you’re running
+  # on. Here’s what you do, in order:
+  #
+  # 1.- Test if the A20 line is already enabled.
+  # 2.- Use a BIOS function.
+  # 3.- Use the keyboard controller.
+  # 4.- The "Fast A20" method.
+
+  cli
+
+  call check_a20
+  testw %ax, %ax        # if ax == 1 a20 is enabled so jmp to _end_a20
+  jnz _end_a20
+  call enable_a20       # else it going to enable it
+
+  ####### 1.- TEST A 20 LINE
+  # Check if a a20 gate is enable. It uses $0x500 and $0x510 addresses to test
+  # it.
+  #
+  # return: ax = 0 if a20 is disabled.
+  #         ax = 1 if a20 is enabled.
+check_a20:
+  pushf
+  pushw %ds
+  pushw %es
+  pushw %di
+  pushw %si
+
+  xorw %ax, %ax         # ax = 0x0000
   movw %ax, %es
-  movw $0x0, %di
-  movw $vesa_service, %ax
-  int $BVESAINF
-  cmp $0x004f, %ax
-  jne _failure
 
+  notw %ax              # ax = 0xffff
+  movw %ax, %ds
+
+  movw $0x0500, %di
+  movw $0x0510, %si
+
+  movb %es:(%di), %al   # save byte 0000:0500 in stack
+  pushw %ax
+
+  movb %ds:(%si), %al   # save byte ffff:0510 in stack
+  pushw %ax
+
+  movb $0x00, %es:(%di) # vove 0x00 to 0000:0500
+  movb $0xff, %ds:(%si) # vove 0xff to ffff:0510
+
+  cmpb $0xff, %es:(%di) # if 0000:0500 have ff then the memory cannot address
+                        # above 1MiB so the line is not enabled.
+
+  popw %ax              # restore all stack values.
+  movb %al, %ds:(%si)
+
+  popw %ax
+  movb %al, %es:(%di)
+
+  movw $0x0, %ax        # if memory does wrapped around (a20 disabled)
+  je _check_a20_exit
+  
+  movw $0x1, %ax        # else (a20 enabled)
+
+_check_a20_exit:
+  popw %si
+  popw %di
+  popw %es
+  popw %ds
+  popf
+  ret
+
+  # Enable the a20 gate. It tries with three methods.
+enable_a20:
+_enable_a20_bios:
+  movw $0x2401, %ax
+  int $0x15
+
+  call check_a20
+  testw %ax, %ax        # if ax == 1 a20 is enabled so jmp to _end_a20
+  jnz _end_a20
+                        # else it going to the next method.
+
+_enable_a20_8042_keyboard:
+  # The keyboard controller can sometimes be used to enable the A20 line (on
+  # any chipset where the A20 line was routed through the keyboard controller).
+  # Here’s the recipe to do it:
+  #
+  # - Disable the keyboard (send command 0xad to the keyboard controller)
+  # - Tell controller that we want to read input (send command 0xd0)
+  # - Read one byte of input
+  # - Tell the controller that we want to write output (send command 0xd1)
+  # - In the byte just read, enable bit #2 and write it to the controller
+  # - Enable the keyboard (send command 0xae)
+  call a20_wait
+  movb $0xad, %al
+  out %al, $0x64
+
+  call a20_wait
+  movb $0xd0, %al
+  out %al, $0x64
+
+  call a20_wait2
+  in $0x60, %al
+  pushl %eax
+
+  call a20_wait
+  movb $0xd1, %al
+  out %al, $0x64
+
+  call a20_wait
+  popl %eax
+  or $0x2, %al
+  out %al, $0x60
+
+  call a20_wait
+  movb $0xae, %al
+  out %al, $0x64
+
+  call a20_wait
+
+  call check_a20
+  testw %ax, %ax        # if ax == 1 a20 is enabled so jmp to _end_a20
+  jnz _end_a20
+                        # else it going to the next method.
+  jmp _enable_a20_fast
+
+a20_wait:
+  in $0x64, %al
+  testb $2, %al
+  jnz a20_wait
+  ret
+
+a20_wait2:
+  in $0x64, %al
+  testb $0x1, %al
+  jz a20_wait2
+  ret
+
+_enable_a20_fast:
+  in $0x92, %al
+  orb $0x2, %al
+  out %al, $0x92
+  
+_end_a20:
+  sti
 
 ######################## LOAD THE SECOND SECTOR WHERE OS IS
 _boot:
@@ -120,8 +265,8 @@ _boot:
 
 
 ################################################################################
-## FUNCTIONS.
-##############################################################################*/
+## GENERAL FUNCTIONS.
+################################################################################
 print_string:
   lodsb
   orb %al, %al
