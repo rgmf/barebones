@@ -1,6 +1,6 @@
-This bootloader loads the seconde sector from a floppy where a program is.
+This bootloader loads the second sector from a floppy where a program is.
 
-The test assembly files are simples bootloader to practice.
+The test assembly files are simple bootloaders for practice.
 
 I have used these sources:
 * wiki.osdev.org
@@ -8,7 +8,7 @@ I have used these sources:
 
 HOW TO USE:
 ================================================================================
-You need bochs installed.
+You need bochs.
 
 Then you can execute:
 * make (to build).
