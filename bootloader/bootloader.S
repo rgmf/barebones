@@ -3,6 +3,7 @@
 ##############################################################################*/
   .equ stage2_base,     0x1000     # where os will be load. Base and
   .equ stage2_offset,   0x0000     # offset. (es=0x1000, bx=0x0 => 0x10000).
+                                   # Don't forget: addr = segment * 16 + offset
 
   .equ PBIOS,           0x10       # BIOS interrupt vector for print services.
   .equ print_service,   0x0e       # BIOS print service.
@@ -12,6 +13,7 @@
 
   .equ MBIOS,           0x15       # BIOS upper memory detection interrupt.
   .equ mem_detection,   0xe820     # upper memory detection service.
+  .equ mem_a20_enable,  0x2401     # a20 gate enable BIOS service.
 
   .equ md_begin_buffer, 0x0800     # buffer list memory detection.
                                    # I put this list here because this RAM is
@@ -175,8 +177,8 @@ _check_a20_exit:
   # Enable the a20 gate. It tries with three methods.
 enable_a20:
 _enable_a20_bios:
-  movw $0x2401, %ax
-  int $0x15
+  movw $mem_a20_enable, %ax
+  int $MBIOS
 
   call check_a20
   testw %ax, %ax        # if ax == 1 a20 is enabled so jmp to _end_a20
