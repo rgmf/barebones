@@ -254,7 +254,7 @@ _enable_a20_fast:
   
 _end_a20:
 
-######################## LOAD THE SECOND SECTOR WHERE OS IS
+######################## LOADS THE SECOND SECTOR WHERE OS IS
 _boot:
   clc
   xorw %bx, %bx

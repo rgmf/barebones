@@ -6,6 +6,15 @@ I have used these sources:
 * wiki.osdev.org
 * https://www.codeproject.com/Articles/668422/Writing-a-boot-loader-in-Assembly-and-C-Part
 
+WHAT BOOTLOADER DOES:
+================================================================================
+At this moment the bootloader does:
+- Memory detection.
+- Test A20 line and enabled it if needed.
+- Loads the second floppy sector.
+- Enters to protected mode.
+- Jump to os.S code.
+
 HOW TO USE:
 ================================================================================
 You need bochs.
