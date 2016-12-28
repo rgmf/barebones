@@ -3,4 +3,7 @@
   .section .text
   .globl _start
 _start:
-  mov $0x5, %dx
+  movl $0x5, %edx
+
+_freeze:
+  jmp _freeze

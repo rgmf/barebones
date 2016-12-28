@@ -3,16 +3,13 @@ floppy.img: bootloader.bin os.bin
 	dd if=os.bin of=floppy.img seek=1 bs=512
 
 bootloader.bin: bootloader.o
-	ld -Ttext=0x7c00 --oformat=binary bootloader.o -o bootloader.bin
+	ld -Ttext=0x7c00 --oformat=binary $^ -o $@
 
-bootloader.o: bootloader.S
-	as bootloader.S -o bootloader.o
+os.bin: os.o
+	ld -Ttext=0x1000 --oformat=binary $^ -o $@
 
-os.bin: os.o bootloader.o
-	ld -Ttext=0x1000 --oformat=binary os.o -o os.bin
-
-os.o: os.S
-	as os.S -o os.o
+%.o: %.S
+	as $^ -o $@
 
 bochs: bochsrc.txt
 	bochs -f bochsrc.txt -q

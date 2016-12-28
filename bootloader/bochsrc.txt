@@ -8,3 +8,4 @@ boot: a
 log: bochsout.txt
 mouse: enabled=0 
 display_library: x, options="gui_debug"
+magic_break: enabled=1

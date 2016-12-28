@@ -1,33 +1,40 @@
 ################################################################################
 ## Names to all the magic numbers I am using.
-##############################################################################*/
-  .equ stage2_base,     0x1000     # where os will be load. Base and
-  .equ stage2_offset,   0x0000     # offset. (es=0x1000, bx=0x0 => 0x10000).
-                                   # Don't forget: addr = segment * 16 + offset
+################################################################################
+  .equ stage2_base_rm,   0x1000     # where os will be load. Base and
+  .equ stage2_offset_rm, 0x0000     # offset. (es=0x1000, bx=0x0 => 0x10000).
+                                    # Don't forget: addr = segment * 16 + offset
+                                    # In Real Mode.
 
-  .equ PBIOS,           0x10       # BIOS interrupt vector for print services.
-  .equ print_service,   0x0e       # BIOS print service.
+  .equ stage2_offset,    0x10000    # offset where os is in the GDT in protected
+                                    # mode.
+  
+  .equ code_selector,    0x08       # code selector in protected mode (GDT).
+  .equ data_selector,    0x10       # data selector in protected mode (GDT).
 
-  .equ DBIOS,           0x13       # BIOS interrupt vector for disk services.
-  .equ disk_read,       0x02       # disk read service.
+  .equ PBIOS,            0x10       # BIOS interrupt vector for print services.
+  .equ print_service,    0x0e       # BIOS print service.
 
-  .equ MBIOS,           0x15       # BIOS upper memory detection interrupt.
-  .equ mem_detection,   0xe820     # upper memory detection service.
-  .equ mem_a20_enable,  0x2401     # a20 gate enable BIOS service.
+  .equ DBIOS,            0x13       # BIOS interrupt vector for disk services.
+  .equ disk_read,        0x02       # disk read service.
 
-  .equ md_begin_buffer, 0x0800     # buffer list memory detection.
-                                   # I put this list here because this RAM is
-                                   # guaranteed free. This is the value that
-                                   # will be load in ES register. When use
-                                   # ES:DI then the phisical address will be:
-                                   # ES * 0x10 + BX. See:
-                                   # http://wiki.osdev.org/Memory_Map_(x86))
+  .equ MBIOS,            0x15       # BIOS upper memory detection interrupt.
+  .equ mem_detection,    0xe820     # upper memory detection service.
+  .equ mem_a20_enable,   0x2401     # a20 gate enable BIOS service.
 
-  .equ vesa_begin_buffer, 0x07e0   # The begin of the 512 bytes buffer for
-                                   # VASA BIOS information structure.
+  .equ md_begin_buffer,  0x0800     # buffer list memory detection.
+                                    # I put this list here because this RAM is
+                                    # guaranteed free. This is the value that
+                                    # will be load in ES register. When use
+                                    # ES:DI then the phisical address will be:
+                                    # ES * 0x10 + BX. See:
+                                    # http://wiki.osdev.org/Memory_Map_(x86))
 
-  .equ BVESAINF,          0x10     # VESA BIOS information functions.
-  .equ vesa_service,      0x4f00   # VESA function information.
+  .equ vesa_begin_buffer, 0x07e0    # The begin of the 512 bytes buffer for
+                                    # VASA BIOS information structure.
+
+  .equ BVESAINF,          0x10      # VESA BIOS information functions.
+  .equ vesa_service,      0x4f00    # VESA function information.
 
 
 ################################################################################
@@ -65,6 +72,8 @@
   .text
   .globl _start
 _start:
+  cli
+
 ######################## MEMORY DETECTION
 _mem_detection:
   movw $md_begin_buffer, %ax
@@ -113,9 +122,6 @@ _mem_detection_finish:
   # 2.- Use a BIOS function.
   # 3.- Use the keyboard controller.
   # 4.- The "Fast A20" method.
-
-  cli
-
   call check_a20
   testw %ax, %ax        # if ax == 1 a20 is enabled so jmp to _end_a20
   jnz _end_a20
@@ -247,23 +253,44 @@ _enable_a20_fast:
   out %al, $0x92
   
 _end_a20:
-  sti
 
 ######################## LOAD THE SECOND SECTOR WHERE OS IS
 _boot:
   clc
   xorw %bx, %bx
-  
-  movw $0x07c0, %ax             # initialize the data segment.
-  movw %ax, %ds                 # to 0x7c00 location.
-  movw $stage2_base, %ax        # set ax = 0x1000.
+
+  # Load the OS at 0x1000 * 0x10 + 0x0 = 0x10000 address.
+  movw $stage2_base_rm, %ax     # set ax = 0x1000.
   movw %ax, %es                 # set es = 0x1000 = ax.
   xorw %bx, %bx                 # set bx = 0.
   m_read_sector_from_floppy $2  # read sector from floppy disk.
 
+######################## ENTER TO PROTECTED MODE
+_protected_mode:
+  #xchgw %bx, %bx
+  lgdt gdt_ptr
+  
+  movl %cr0, %eax
+  orl $1, %eax
+  movl %eax, %cr0
+
+  mov $data_selector, %ax
+  mov %ax, %ds
+  mov %ax, %es
+  mov %ax, %fs
+  mov %ax, %gs
+  mov %ax, %ss
+
   # Far jump. With this instruction it modifies cs segment register with the
   # first value. The other one is an offset.
-  ljmp $stage2_base, $stage2_offset
+  ljmp $code_selector, $_code32
+
+######################## JUMP TO THE OS CODE
+  # Here it is in protected mode. It can to jump to OS that is at 0x10000
+  # address.
+  .code32
+_code32:
+  ljmp $code_selector, $stage2_offset
 
 
 ################################################################################
@@ -289,6 +316,25 @@ _failure:
   jmp _freeze
   
 
+#gdt:
+#  .quad 0x0000000000000000
+#  .quad 0x00CF9A000000FFFF
+#  .quad 0x00CF92000000FFFF
+#  .quad 0x00CFFA000000FFFF
+#  .quad 0x00CFF2000000FFFF
+#gdt_ptr:
+#  .word . - gdt - 1
+#  .long gdt
+  
+gdt:
+  .quad 0x0000000000000000  # empty entry
+  .quad 0x00cf9a000000ffff  # code entry
+  .quad 0x00cf92000000ffff  # data entry
+
+gdt_ptr:
+  .word gdt_ptr - gdt - 1       # Length of gdt
+  .long gdt                     # Base address of gdt
+  
 msg_fail:
   .asciz "Something was wrong..."
 
