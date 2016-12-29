@@ -1,0 +1,107 @@
+* ¿Cómo empieza a ejecutarse el bootloader?
+  La BIOS carga el primer sector (los primeros 512 bytes) del dispositivo de 
+  arranque en la posición de memoria 0x7c00 y salta al código cargado.
+  El bootloader tiene que acabar en los bytes 0xaa55.
+* Modo Real
+  Cuando la BIOS da paso al bootloader el procesador está en Modo Real y, por
+  tanto, el código es de 16 bits.
+* Cuestiones a tener en cuenta antes de ponerse manos a la obra
+** Segmentación
+  En Modo Real se usa la segmentación y las direcciones que se usan en las 
+  instrucciones de ensamblador son direcciones lógicas que se convierten a
+  físicas de la siguiente manera:
+  *segmento* x *0x10* + *offset*, donde:
+  - segmento :: es el número de segmento.
+  - 0x10 :: es el número 16 en hexadecimal. Cada segmento ocupa 64KiB
+	    (0x10000).
+  - offset :: offset dentro del segmento seleccionado (de 0x00000 a 
+	      0x10000).
+  Se tienen 6 registros de segmento que hay que considerar:
+  - CS :: segmento de código.
+  - DS :: segmento de datos.
+  - SS :: segmento de pila.
+  - ES :: segmento extra.
+  - FS :: segmento de propósito general.
+  - GS :: segmento de propósito general.
+  Se tienen una serie de escenarios, instrucciones, en los que estos 6 
+  segmentos se ven afectados:
+  - Far Jump :: el nuevo valor del registro CS se indica en la instrucción. Por
+		ejemplo: ljmp 0x08:0x1000 carga con el valor 0x08 el registro
+		CS y salta a la dirección 0x08 * 0x10 + 0x1000 = 0x1080.
+  - Far Call :: sucede lo mismo que en el caso anterior, pero los valores CS/IP
+		son apilados antes de ejecutar la siguiente posición.
+  - INT :: la CPU lee el nuevo valor de CS/IP de la tabla de vectores de
+	   interrupción y ejecuta un Far Call después de aplicar el registro 
+           EFLAGS.
+  - IRET :: hace lo mismo que un Far Return pero desapila EFLAGS a CS/IP.
+** ¿Qué sabemos de la memoria antes de nada?
+   En las BIOS tenemos garantizado los primeros 64KiB (está más o menos 
+   estandarizado). Ver en:
+   http://wiki.osdev.org/Memory_Map_(x86)#Overview
+   Creo, por tanto, que es una buena idea ejecutar el bootloader en los 
+   primeros 64KiB de memoria. Una vez hecha la detección de memoria ya
+   tendremos más información.
+* Tareas que lleva a cabo mi bootloader
+** Detección de memoria
+   Utilizamos los servicios que ofrece la BIOS a través de interrupciones.
+   Para este caso empleamos la interrupción 0x15 y los siguiente servicios:
+   - eax = 0xe820 :: ponemos este valor en el registro eax y lanzamos la int
+		     0x15 y la BIOS nos pone la información de la memoria del
+		     sistema en la dirección de memoria apuntada por es:di. De
+		     esta manera hay que ir incrementando el valor de di en 24
+		     ya que cada entrada ocupa 24 bytes.
+   Más información en: 
+   http://wiki.osdev.org/Detecting_Memory_(x86)
+   A parte del ejemplo que tenemos en el enlace anterior, se puede ver otro
+   ejemplo de información en la detección de memoria a continuación (es lo que
+   obtuve cuando ejecuté este bootloader en Bochs):
+   |       Base Address |             Length | Type |
+   |--------------------+--------------------+------|
+   | 0x0000000000000000 | 0x000000000009f000 |    1 |
+   | 0x000000000009f000 | 0x0000000000001000 |    2 |
+   | 0x00000000000e8000 | 0x0000000000018000 |    2 |
+   | 0x0000000000100000 | 0x0000000001ef0000 |    1 |
+   | 0x0000000001ff0000 | 0x0000000000010000 |    3 |
+   | 0x00000000fffc0000 | 0x0000000000040000 |    2 |
+   |--------------------+--------------------+------|
+   Como se puede observar en esta tabla, la cantidad de memoria total es de
+   4GiB. ¿Cómo se sabe? A la última dirección base (0x00000000fffc00009 se le
+   suma su longitud (0x0000000000040000) y nos da un total de 4GiB, es decir,
+   la dirección 0x0x0000000100000000.
+   Hay que conocer muy bien donde se va almacenar esta tabla y hay que dejarlo
+   de alguna manera para que el SO puede acceder a esta información. Lo ideal
+   sería proporcionar una serie de funciones para acceder a esta información.
+   En el caso de mi bootloader, esta tabla está a partir de la posición de 
+   memoria 0x0800 * 0x10 + 0x0 = 0x8000.
+** Comprobar la línea A20 y habilitarla si no lo está ya
+   Mirar en el código fuente cómo se hace. Es bastante largo y no está muy
+   estandarizado, por ese motivo hay que comprobar si está habilitada y si no
+   lo está habilitarla mediante un método; comprobar si funcionó y si no probar
+   a habilitarla de otra manera; comprobar si funcionó, etc.
+** Cargar el segundo sector en memoria
+   De nuevo se hace mediante interrupciones a la BIOS:
+   - int 0x13 :: esta es la interrupción para servicios de disco de la BIOS.
+   - ah = 0x02 :: servicio de lectura del disco.
+   Se puede ver el código fuente para más detalles. El segundo sector, como se 
+   ve en el código, aunque podría cambiar, se carga en la posición de memoria
+   0x1000 que se traduce en 0x1000 * 0x10 + 0x0 = 0x10000 (RECUERDA: estamos en
+   Modo Real todavía y, por tanto, la dirección física se calcula de esa
+   manera).
+** Entrar a modo protegido (32 bits)
+   Para hacer esto se llevan a cabo los siguientes pasos:
+   1. lgdt gdt_ptr :: se carga el registro GDT con la información que hay en 
+		      gdt_ptr, a saber:
+		      gdt_ptr se trata de una estructura de 48 bits:
+      - size :: 16 bits con el tamaño de la tabla de segmentos GDT.
+      - offset :: 32 bits con la dirección base de la tabla de segmentos GDT.
+   2. bit 0 cr0 a 1 :: tenemos que poner el bit 0 del registro de control CR0
+		       a 1.
+   3. registros de segmento :: todos menos CS con la posición de la entrada a 
+                               la tabla GDT donde está el segmento de datos
+                               definido. En nuestro caso 0x10 (16 en decimal).
+   4. Far Jump :: ejecutamos un far jump para cambiar el valor del registro CS
+		  por la posición de la tabla GDT donde está el segmento de 
+		  código definido. En el offset se tiene la posición de memoria
+		  donde está el stage2 (o SO) que cargamos en el paso anterior.
+   A partir de aquí, ya estamos en modo protegido, ya hemos dado paso al stage2
+   y puede continuar todo.

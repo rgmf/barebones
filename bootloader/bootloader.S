@@ -265,7 +265,7 @@ _boot:
   xorw %bx, %bx                 # set bx = 0.
   m_read_sector_from_floppy $2  # read sector from floppy disk.
 
-######################## ENTER TO PROTECTED MODE
+######################## ENTERS TO PROTECTED MODE
 _protected_mode:
   #xchgw %bx, %bx
   lgdt gdt_ptr
